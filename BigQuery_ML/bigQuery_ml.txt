@@ -1,0 +1,98 @@
+A: Create dataset bqml_lab
+B: Create Model
+"""
+
+#standardSQL
+CREATE OR REPLACE MODEL `bqml_lab.sample_model`
+OPTIONS(model_type='logistic_reg') AS
+SELECT
+  IF(totals.transactions IS NULL, 0, 1) AS label,
+  IFNULL(device.operatingSystem, "") AS os,
+  device.isMobile AS is_mobile,
+  IFNULL(geoNetwork.country, "") AS country,
+  IFNULL(totals.pageviews, 0) AS pageviews
+FROM
+  `bigquery-public-data.google_analytics_sample.ga_sessions_*`
+WHERE
+  _TABLE_SUFFIX BETWEEN '20160801' AND '20170631'
+LIMIT 100000;
+
+"""
+Explaination--
+This SQL script creates a logistic regression model using BigQuery ML. Here’s a brief breakdown:
+
+1. Model Creation: The CREATE OR REPLACE MODEL statement creates a new model named sample_model in the bqml_lab dataset. The model type is specified as logistic_reg.
+2. Label Definition: The label column is defined as 1 if there are transactions (totals.transactions is not NULL), otherwise 0.
+3. Feature Selection:
+    os: Operating system of the device, with NULL values replaced by an empty string.
+    is_mobile: Indicates if the device is mobile.
+    country: Country from the geoNetwork, with NULL values replaced by an empty string.
+    pageviews: Number of pageviews, with NULL values replaced by 0.
+
+4. Data Source: The data is selected from the google_analytics_sample.ga_sessions_* table.
+5. Date Range: The data is filtered to include sessions between August 1, 2016, and June 31, 2017.
+6. Limit: The query is limited to 100,000 rows.
+
+C: Evaluate the Model
+
+"""
+#standardSQL
+SELECT
+  *
+FROM
+  ml.EVALUATE(MODEL `bqml_lab.sample_model`, (
+SELECT
+  IF(totals.transactions IS NULL, 0, 1) AS label,
+  IFNULL(device.operatingSystem, "") AS os,
+  device.isMobile AS is_mobile,
+  IFNULL(geoNetwork.country, "") AS country,
+  IFNULL(totals.pageviews, 0) AS pageviews
+FROM
+  `bigquery-public-data.google_analytics_sample.ga_sessions_*`
+WHERE
+  _TABLE_SUFFIX BETWEEN '20170701' AND '20170801'));
+
+"""
+D: Use the Model
+"""
+#standardSQL
+SELECT
+  country,
+  SUM(predicted_label) as total_predicted_purchases
+FROM
+  ml.PREDICT(MODEL `bqml_lab.sample_model`, (
+SELECT
+  IFNULL(device.operatingSystem, "") AS os,
+  device.isMobile AS is_mobile,
+  IFNULL(totals.pageviews, 0) AS pageviews,
+  IFNULL(geoNetwork.country, "") AS country
+FROM
+  `bigquery-public-data.google_analytics_sample.ga_sessions_*`
+WHERE
+  _TABLE_SUFFIX BETWEEN '20170701' AND '20170801'))
+GROUP BY country
+ORDER BY total_predicted_purchases DESC
+LIMIT 10;
+
+"""
+#standardSQL
+SELECT
+  fullVisitorId,
+  SUM(predicted_label) as total_predicted_purchases
+FROM
+  ml.PREDICT(MODEL `bqml_lab.sample_model`, (
+SELECT
+  IFNULL(device.operatingSystem, "") AS os,
+  device.isMobile AS is_mobile,
+  IFNULL(totals.pageviews, 0) AS pageviews,
+  IFNULL(geoNetwork.country, "") AS country,
+  fullVisitorId
+FROM
+  `bigquery-public-data.google_analytics_sample.ga_sessions_*`
+WHERE
+  _TABLE_SUFFIX BETWEEN '20170701' AND '20170801'))
+GROUP BY fullVisitorId
+ORDER BY total_predicted_purchases DESC
+LIMIT 10;
+
+"""
